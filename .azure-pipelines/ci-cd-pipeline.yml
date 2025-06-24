@@ -1,0 +1,64 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  BACKEND_PATH: 'PositionApp/PositionAPI'
+  FRONTEND_PATH: 'PositionApp/frontend'
+
+jobs:
+- job: BuildAndDeployBackEnd
+  displayName: 'Build and Deploy Back-End'
+  steps:
+  - task: UseDotNet@2
+    inputs:
+      packageType: 'sdk'
+      version: '8.0' 
+      installationPath: $(Agent.ToolsDirectory)/dotnet
+
+  - checkout: self
+
+  - script: |
+      cd $(BACKEND_PATH)
+      dotnet restore
+      dotnet build --configuration Release
+      dotnet publish --configuration Release --output $(Build.ArtifactStagingDirectory)/publish
+    displayName: 'Build and Publish Back-End'
+
+  - task: AzureWebApp@1
+    inputs:
+      azureSubscription: 'YOUR_AZURE_SUBSCRIPTION'  # Tu suscripción de Azure
+      appName: 'PositionAPI'
+      package: '$(Build.ArtifactStagingDirectory)/publish'
+    displayName: 'Deploy Back-End to Azure WebApp'
+
+- job: BuildAndDeployFrontEnd
+  displayName: 'Build and Deploy Front-End'
+  steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '16.8'
+      addToPath: true
+
+  - checkout: self
+
+  - script: |
+      cd $(FRONTEND_PATH)
+      npm install
+      npm run build  # Asegúrate de que tu build está configurado para producir los archivos estáticos (output)
+    displayName: 'Build Front-End with Vite'
+
+  - task: AzureBlobFileCopy@2
+    inputs:
+      sourceFolder: '$(FRONTEND_PATH)/dist'  # La carpeta de salida de tu build (ajusta según tu configuración de Vite)
+      azureSubscription: 'YOUR_AZURE_SUBSCRIPTION'  # Tu suscripción de Azure
+      destination: 'AzureBlob'
+      storage: 'YOUR_STORAGE_ACCOUNT_NAME'
+      containerName: 'YOUR_CONTAINER_NAME'
+      blobPrefix: 'wwwroot'
+    displayName: 'Deploy Front-End to Azure Blob Storage'
+
